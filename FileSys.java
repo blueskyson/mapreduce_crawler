@@ -11,13 +11,13 @@ public class FileSys {
         File dir = new File(dir_str);
         if (!dir.exists()) {
             if (dir.mkdir()) {
-                System.out.println("Create directory: " + dir_str);
+                //System.out.println("Create directory: " + dir_str);
             } else {
                 System.out.println("Failed to create directory: " + dir_str);
                 return false;
             }
         } else {
-            System.out.println("\"" + dir_str + "\" already exists");
+            //System.out.println("\"" + dir_str + "\" already exists");
         }
         return true;
     }
@@ -28,19 +28,19 @@ public class FileSys {
         try {
             FileSystem fs = FileSystem.get(URI.create("/"), conf);
             if (fs.exists(new Path(dir_str))) {
-                System.out.println("Directory: \"" + dir_str + "\" already exists in HDFS.");
+                //System.out.println("Directory: \"" + dir_str + "\" already exists in HDFS.");
                 return true;
             }
             if (fs.mkdirs(new Path(dir_str))) {
-                System.out.println("Create directory: " + dir_str + " in HDFS.\n");
+                //System.out.println("Create directory: " + dir_str + " in HDFS.\n");
                 return true;
             } else {
-                System.out.println("Failed to create directory: " + dir_str + " in HDFS.\n");
+                System.out.println("    Failed to create directory: " + dir_str + " in HDFS.");
                 return false;
             }
         } catch (IOException e) {
-            System.out.println("IOException occurred when creating directory in HDFS");
-            e.printStackTrace();
+            System.out.println("    IOException occurred when creating " + dir_str + " in HDFS");
+            //e.printStackTrace();
             return false;
         }
     }
@@ -51,10 +51,10 @@ public class FileSys {
         try {
             FileSystem fs = FileSystem.get(URI.create("/"), conf);
             fs.copyFromLocalFile(new Path(localDir), new Path(hdfsDir));
-            System.out.println("Copy " + localDir + " to HDFS successfully\n");
+            //System.out.println("Copy " + localDir + " to HDFS successfully");
         } catch (IOException e) { 
-            System.out.println("IOException occurred when copying " + localDir + " to HDFS\n");
-            e.printStackTrace();
+            System.out.println("    IOException occurred when copying " + localDir + " to HDFS");
+            //e.printStackTrace();
             return false;
         }
         return true;

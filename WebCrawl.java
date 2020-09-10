@@ -12,22 +12,22 @@ import org.jsoup.Connection.Response;
 import org.jsoup.HttpStatusException;
 public class WebCrawl {
     public static Response ConnectResponse(String url) {
-        System.out.println("Fetching " + url + "...");
+        //System.out.println("Fetching " + url + "...");
         try {
             return Jsoup.connect(url).userAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.89 Safari/537.36 RuxitSynthetic/1.0 v6297461322 t38550 ath9b965f92 altpub").timeout(5000).execute();
         } catch (HttpStatusException e) {
-            System.out.println("    Connect error! Status code: " + e.getStatusCode());
+            System.out.println("    Connecting to " + url + " error. Status code: " + e.getStatusCode());
             return null;
         } catch (IOException e) {
-            System.out.println("    IOException!");
-            e.printStackTrace();
+            System.out.println("    IOException occurred when connecting to " + url);
+            //e.printStackTrace();
             return null;
         }
     }
 
     public static int saveText(String words, String file_dir) {
         if (words == "") {
-            System.out.println("    No content. Skip saving this site.");
+            //System.out.println("    No content. Skip saving this site.");
             return 0;
         }
         File words_file = new File(file_dir);
@@ -38,15 +38,15 @@ public class WebCrawl {
                     return 0;
                 }
                 Files.write(Paths.get(file_dir), words.getBytes(StandardCharsets.UTF_8));
-                System.out.println("Save file as " + file_dir + " successfully");
+                //System.out.println("Save file as " + file_dir + " successfully");
                 return 1;
             } else {
-                System.out.println("    This site has been crawled");
+                //System.out.println("    This site has been crawled");
                 return 2;
             }
         } catch (IOException e) {
-            System.out.println("    IOException occurred when saving file!");
-            e.printStackTrace();
+            System.out.println("    IOException occurred when saving " + file_dir);
+            //e.printStackTrace();
             return 0;
         }
     }
@@ -63,8 +63,8 @@ public class WebCrawl {
             }
             return words;
         } catch (NullPointerException e) {
-            System.out.println("    Could not parse this site");
-            e.printStackTrace();
+            System.out.println("    Could not parse " + doc.title());
+            //e.printStackTrace();
             return "";
         }
     }
