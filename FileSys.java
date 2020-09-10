@@ -5,6 +5,7 @@ import java.net.URI;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.FSDataOutputStream;
 
 public class FileSys {
     public static boolean mkdir(String dir_str) {
@@ -58,5 +59,24 @@ public class FileSys {
             return false;
         }
         return true;
-    }   
+    }
+
+    public static int fs_save(String str, String hdfsDir) {
+        Configuration conf = new Configuration();
+        conf.addResource("core-site.xml");
+        try {
+            FileSystem fs = FileSystem.get(URI.create("/"), conf);
+            Path hdfswritepath = new Path(hdfsDir);
+            if (fs.exists(hdfswritepath)) {
+                //System.out.println("Directory: \"" + dir_str + "\" already exists in HDFS.");
+                return 1;
+            }
+            FSDataOutputStream outputStream = fs.create(hdfswritepath);
+            outputStream.writeBytes(str);
+            outputStream.close();
+            return 2;
+        } catch (IOException e) {
+            return 0;
+        }
+    }
 }

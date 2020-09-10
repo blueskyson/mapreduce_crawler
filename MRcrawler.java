@@ -22,6 +22,7 @@ import org.apache.hadoop.mapreduce.lib.input.MultipleInputs;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
+import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
 
 public class MRcrawler {
     public static String root_dir, fs_root_dir, url_dir, fs_url_dir;
@@ -74,7 +75,7 @@ public class MRcrawler {
         SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd 'at' HH:mm:ss z");
         long job1_start_t = System.currentTimeMillis();
         String job1_start_str = formatter.format(new Date(job1_start_t));
-        System.out.println("\n*** Start to crawl. Current time: " + job1_start_str + " ***\n");
+        System.out.println("*** Start to crawl. Current time: " + job1_start_str + " ***\n");
         
         try {
             for (int level = 1; level <= max_level; level++) {
@@ -88,13 +89,18 @@ public class MRcrawler {
                     System.out.println("Unable to create directory \"" + fs_lv_dir + "\" in HDFS.");
                     return;
                 }
+                
                 Job job1 = Job.getInstance(conf, "crawl");
-                FileInputFormat.addInputPath(job1, new Path(fs_base));
                 job1.setJarByClass(MRcrawler.class);
                 job1.setMapperClass(CrawlMapper.class);
-                job1.setNumReduceTasks(0);
-                job1.setOutputFormatClass(NullOutputFormat.class);
-                
+                job1.setCombinerClass(CountReducer.class);
+                job1.setReducerClass(CountReducer.class);
+                job1.setOutputKeyClass(Text.class);
+                job1.setOutputValueClass(Text.class);
+                FileInputFormat.addInputPath(job1, new Path(fs_base));
+                FileOutputFormat.setOutputPath(job1, new Path(fs_base + "/MepredOutput"));
+                //job1.setNumReduceTasks(0);
+                //job1.setOutputFormatClass(NullOutputFormat.class);
                 if (job1.waitForCompletion(true)) {
                     System.out.println(level_str + " Succeed.");
                     fs_base = fs_lv_dir;
@@ -122,63 +128,66 @@ public class MRcrawler {
         System.out.println("\n*** cost time: " + (int)(job1_cost_sec / 60) + "m " + (int)(job1_cost_sec % 60) + "s ***");
 
     }
-
-    public static class CrawlMapper extends Mapper<Object, Text, Text, IntWritable> {
+    
+    public static class CrawlMapper extends Mapper<Object, Text, Text, Text> {
+        private Text weburl = new Text();
+        private Text webtext = new Text();
         public void map(Object key, Text value, Context context) {
             StringTokenizer itr = new StringTokenizer(value.toString(), "\n");
             UrlValidator urlCheck = new UrlValidator();
             while (itr.hasMoreTokens()) {
                 String target_url = itr.nextToken();
+                System.out.println("\n * " + target_url);
                 if (!urlCheck.isValid(target_url)) {
-                    System.out.println("    Invalid URL: " + target_url);
+                    //System.out.println("    Invalid URL: " + target_url);
                     continue;
                 }
                 Response res = WebCrawl.ConnectResponse(target_url);
                 if (res == null) {
-                    System.out.println("    Failed to crawl " + target_url);
+                    //System.out.println("    Failed to crawl " + target_url);
                     web_abort++;
                     continue;
-                } else {
-                    crawl_num++;
                 }
+                crawl_num++;
                 Document doc;
                 try {
                     doc = res.parse();
+                    weburl.set(target_url);
+                    webtext.set(WebCrawl.getWords(doc));
+                    context.write(weburl, webtext);
                 } catch (IOException e) {
-                    System.out.println("    IOException occurred when parsing " + target_url);
-                    //e.printStackTrace();
+                    //System.out.println("    IOException occurred when parsing " + target_url);
                     web_abort++;
                     continue;
-                }
-                
-                String fileName = doc.title().replace(' ', '_').replace(',', '_').replace(':', '_');
-                String fileDir = root_dir + "/" + fileName + "-.txt";
-                int save_value = WebCrawl.saveText(WebCrawl.getWords(doc), fileDir);
-                if (save_value == 1) {
-                    //System.out.println("\nAdd file " + fileDir + " to MapReduce input path.\n");
-                    if (FileSys.fs_upload(fileDir, fs_root_dir)) {
-                        String hdfsFileDir = fs_root_dir + "/" + fileName + "-.txt";
-                        web_num++;
-                    } else {
-                        web_abort++;
-                        continue;
-                    }
-                } else if (save_value == 2){
-                    web_recrawled++;
+                } catch (InterruptedException e) {
                     web_abort++;
                     continue;
-                } else {
-                    web_abort++;
-                    continue;
-                }
-                
-                String urlsDir = next_lv_dir + "/" + fileName + "-.txt";
-                save_value = WebCrawl.saveText(WebCrawl.getLinks(doc), urlsDir);
-                if (save_value == 1) {
-                    //System.out.println("\nAdd file " + urlsDir + " to MapReduce url path.\n");
-                    FileSys.fs_upload(urlsDir, fs_lv_dir);
                 }
             }
+        }
+    }
+
+    public static class CountReducer extends Reducer<Text, Text, Text, Text> {
+        private String filename;
+        private Text filetext;
+        public void reduce(Text key, Iterable<Text> values, Context context)
+                throws IOException, InterruptedException {
+            int recrawled = 1;
+            filetext = values.iterator().next();
+            for (Text val:values) {
+                recrawled++;
+            }
+            web_num++;
+            web_recrawled = web_recrawled + recrawled - 1;
+            context.write(key, filetext);
+            /*
+            filename = key.toString().replace("https://", "").replace("http://", "");
+            MultipleOutputs text_file = new MultipleOutputs(context);
+            filetext.set(p.left);
+            text_file.write(filename, null, filetext, fs_root_dir);
+            filetext.set(p.right);
+            text_file.write(filename, null, filetext, fs_lv_dir);
+            */
         }
     }
 }
