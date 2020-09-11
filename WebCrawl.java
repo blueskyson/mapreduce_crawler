@@ -12,15 +12,11 @@ import org.jsoup.Connection.Response;
 import org.jsoup.HttpStatusException;
 public class WebCrawl {
     public static Response ConnectResponse(String url) {
-        //System.out.println("Fetching " + url + "...");
         try {
             return Jsoup.connect(url).userAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.89 Safari/537.36 RuxitSynthetic/1.0 v6297461322 t38550 ath9b965f92 altpub").timeout(5000).execute();
         } catch (HttpStatusException e) {
-            System.out.println("    Connecting to " + url + " error. Status code: " + e.getStatusCode());
             return null;
         } catch (IOException e) {
-            System.out.println("    IOException occurred when connecting to " + url);
-            //e.printStackTrace();
             return null;
         }
     }
@@ -63,8 +59,6 @@ public class WebCrawl {
             }
             return words;
         } catch (NullPointerException e) {
-            System.out.println("    Could not parse " + doc.title());
-            //e.printStackTrace();
             return "";
         }
     }
