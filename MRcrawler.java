@@ -27,27 +27,26 @@ import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.MultipleOutputs;
 
 public class MRcrawler {
-    public static String root_dir, fs_root_dir, url_dir, fs_url_dir;
+    public static String fs_root_dir, url_dir, fs_url_dir;
     public static String level_str, next_lv_dir, fs_lv_dir;
     public static int crawl_num, web_num, web_abort, web_recrawled, max_level;
 
     public static void main(String args[]) throws IOException {
         Validate.isTrue(args.length == 2, "usage: hadoop jar MRcrawler.jar MRcrawler [base urls file] [crawl depth]");
-        root_dir = "MRcrawler";
 
-        fs_root_dir = '/' + root_dir;
+        fs_root_dir = "/MRcrawler";
         if (!FileSys.fs_mkdir(fs_root_dir)) {
-            System.out.println("Unable to create directory \"" + root_dir + "\" in HDFS.");
+            System.out.println("Unable to create directory in HDFS.");
             return;
         }
         
         if (!FileSys.fs_mkdir(fs_root_dir + "/level0")) {
-            System.out.println("Unable to create directory \"" + root_dir + "\" in HDFS.");
+            System.out.println("Unable to create directory in HDFS.");
             return;
         }
         
         if (!FileSys.fs_mkdir(fs_root_dir + "/level0/Urls")) {
-            System.out.println("Unable to create directory \"" + root_dir + "\" in HDFS.");
+            System.out.println("Unable to create directory in HDFS.");
             return;
         }
 
@@ -84,12 +83,7 @@ public class MRcrawler {
                 MultipleOutputs.addNamedOutput(job1, "Texts", TextOutputFormat.class, Text.class, Text.class);
                 MultipleOutputs.addNamedOutput(job1, "Urls", TextOutputFormat.class, Text.class, Text.class);
                 MultipleOutputs.addNamedOutput(job1, "RecrawlTime", TextOutputFormat.class, Text.class, IntWritable.class);
-
-                if (job1.waitForCompletion(true)) {
-                    System.out.println(level_str + " Succeed.");
-                } else {
-                    return;
-                }
+                job1.waitForCompletion(true);
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -106,7 +100,51 @@ public class MRcrawler {
         long job1_cost_sec = (job1_finish_t - job1_start_t) / 1000;
         String job1_finish_str = formatter.format(new Date(job1_finish_t));
         System.out.println("\n*** Finish crawling. Current time: " + job1_finish_str + " ***");
-        System.out.println("\n*** cost time: " + (int)(job1_cost_sec / 60) + "m " + (int)(job1_cost_sec % 60) + "s ***");
+
+        long job2_start_t = System.currentTimeMillis();
+        String job2_start_str = formatter.format(new Date(job2_start_t));
+        System.out.println("*** Start to count words. Current time: " + job2_start_str + " ***\n");
+
+        try {
+            Job job2 = Job.getInstance(conf, "word count");
+            job2.setJarByClass(MRcrawler.class);
+            job2.setMapperClass(TokenizerMapper.class);
+            job2.setCombinerClass(IntSumReducer.class);
+            job2.setReducerClass(IntSumReducer.class);
+            job2.setOutputKeyClass(Text.class);
+            job2.setOutputValueClass(IntWritable.class);
+            for (int i = 1; i <= max_level; i++)
+                MultipleInputs.addInputPath(job2, new Path(fs_root_dir + "/level" + i + "/Texts"),
+                        TextInputFormat.class, TokenizerMapper.class);
+            FileOutputFormat.setOutputPath(job2, new Path(fs_root_dir + "/wordcount"));
+            job2.waitForCompletion(true);
+        } catch (IOException e) {
+            e.printStackTrace();
+            return;
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+            return;
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+            return;
+        }
+        
+        long job2_finish_t = System.currentTimeMillis();
+        long job2_cost_sec = (job2_finish_t - job2_start_t) / 1000;
+        String job2_finish_str = formatter.format(new Date(job2_finish_t));
+        System.out.println("\n*** Finish counting. Current time: " + job2_finish_str + " ***");
+        System.out.println("\n*** Crawl cost time: " + (int)(job1_cost_sec / 60) + "m " + (int)(job1_cost_sec % 60) + "s ***");
+        System.out.println("\n*** Count cost time: " + (int)(job2_cost_sec / 60) + "m " + (int)(job2_cost_sec % 60) + "s ***\n");
+        
+        int crawlnum = 0, recrawlnum = 0, recognizenum = 0;
+        for (int i = 1; i <= max_level; i++) {
+            int[] result = FileSys.fs_read_crawler_info("/MRcrawler/level" + i + "/RecrawlTime/");
+            System.out.println("\n*** In level1: crawl = " + (result[0] + result[1]) + " recognize = " + result[0] + " recrawl = " + result[1]);
+            crawlnum += result[0] + result[1];
+            recognizenum += result[1];
+            recrawlnum += result[1];
+        }
+        System.out.println("\n*** Total: crawl = " + crawlnum + " recognize = " + recognizenum + " recrawl = " + recrawlnum);
     }
     
     public static class CrawlMapper extends Mapper<Object, Text, Text, TextPair> {
@@ -164,7 +202,36 @@ public class MRcrawler {
             mos.write("Texts", nulltext, value.getFirst(), "Texts/text");
             mos.write("Urls", nulltext, value.getSecond(), "Urls/urls");
             mos.write("RecrawlTime", nulltext, recrawltime, "RecrawlTime/recrawltime");
+        }
+    }
 
+    public static class TokenizerMapper
+        extends Mapper<Object, Text, Text, IntWritable> {
+        private final static IntWritable one = new IntWritable(1);
+        private Text word = new Text();
+
+        public void map(Object key, Text value, Context context
+                    ) throws IOException, InterruptedException {
+        StringTokenizer itr = new StringTokenizer(value.toString(), " \"\n\'.,+-*/%()[]{}<>`~!@#?");
+            while (itr.hasMoreTokens()) {
+                word.set(itr.nextToken());
+            context.write(word, one);
+            }
+        }
+    }
+
+    public static class IntSumReducer
+       extends Reducer<Text,IntWritable,Text,IntWritable> {
+        private IntWritable result = new IntWritable();
+
+        public void reduce(Text key, Iterable<IntWritable> values, 
+                Context context) throws IOException, InterruptedException {
+            int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();
+            }
+            result.set(sum);
+            context.write(key, result);
         }
     }
 }

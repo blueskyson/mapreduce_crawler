@@ -1,12 +1,15 @@
 import java.io.IOException;
 import java.io.File;
 import java.net.URI;
+import java.util.Scanner;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.FSDataOutputStream;
-
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.RemoteIterator;
+import org.apache.hadoop.fs.LocatedFileStatus;
 public class FileSys {
     public static boolean mkdir(String dir_str) {
         File dir = new File(dir_str);
@@ -77,6 +80,34 @@ public class FileSys {
             return 2;
         } catch (IOException e) {
             return 0;
+        }
+    }
+
+    public static int[] fs_read_crawler_info(String hdfsDir) {
+        Configuration conf = new Configuration();
+        conf.addResource("core-site.xml");
+        int[] result = new int[2];
+        try {
+            FileSystem fs = FileSystem.get(URI.create("/"), conf);
+            Path inDir = new Path(hdfsDir);
+            if (!fs.exists(inDir)) {
+                return null;
+            }
+            RemoteIterator<LocatedFileStatus> fileListItr = fs.listFiles(inDir, false);
+            while (fileListItr != null && fileListItr.hasNext()) {
+                Path inFile = fileListItr.next().getPath();
+                FSDataInputStream in = fs.open(inFile);
+                Scanner s = new Scanner(in);
+                result[0] = 0;
+                result[1] = 0;
+                while(s.hasNext()) {
+                    result[0]++;
+                    result[1] += Integer.valueOf(s.next());
+                }
+            }
+            return result;
+        } catch (IOException e) {
+            return null;
         }
     }
 }
