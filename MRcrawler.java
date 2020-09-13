@@ -113,6 +113,7 @@ public class MRcrawler {
             job2.setReducerClass(IntSumReducer.class);
             job2.setOutputKeyClass(Text.class);
             job2.setOutputValueClass(IntWritable.class);
+            job2.getConfiguration().setStrings("mapreduce.reduce.shuffle.memory.limit.percent", "0.1");
             for (int i = 1; i <= max_level; i++)
                 MultipleInputs.addInputPath(job2, new Path(fs_root_dir + "/level" + i + "/Texts"),
                         TextInputFormat.class, TokenizerMapper.class);
@@ -139,9 +140,9 @@ public class MRcrawler {
         int crawlnum = 0, recrawlnum = 0, recognizenum = 0;
         for (int i = 1; i <= max_level; i++) {
             int[] result = FileSys.fs_read_crawler_info("/MRcrawler/level" + i + "/RecrawlTime/");
-            System.out.println("\n*** In level1: crawl = " + (result[0] + result[1]) + " recognize = " + result[0] + " recrawl = " + result[1]);
+            System.out.println("\n*** In level" + i + ": crawl = " + (result[0] + result[1]) + " recognize = " + result[0] + " recrawl = " + result[1]);
             crawlnum += result[0] + result[1];
-            recognizenum += result[1];
+            recognizenum += result[0];
             recrawlnum += result[1];
         }
         System.out.println("\n*** Total: crawl = " + crawlnum + " recognize = " + recognizenum + " recrawl = " + recrawlnum);
@@ -172,7 +173,6 @@ public class MRcrawler {
                     weburl.set(target_url);
                     context.write(weburl, new TextPair(WebCrawl.getWords(doc), WebCrawl.getLinks(doc)));
                 } catch (IOException e) {
-                    //System.out.println("    IOException occurred when parsing " + target_url);
                     continue;
                 } catch (InterruptedException e) {
                     continue;
@@ -203,6 +203,11 @@ public class MRcrawler {
             mos.write("Urls", nulltext, value.getSecond(), "Urls/urls");
             mos.write("RecrawlTime", nulltext, recrawltime, "RecrawlTime/recrawltime");
         }
+        
+        public void cleanup(Context context) throws IOException, InterruptedException {
+            mos.close();
+        }
+
     }
 
     public static class TokenizerMapper
